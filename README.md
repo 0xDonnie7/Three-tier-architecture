@@ -14,7 +14,7 @@ cd envs/dev
 terraform init \
   -backend-config="bucket=<your-state-bucket>" \
   -backend-config="key=dev/terraform.tfstate" \
-  -backend-config="region=eu-west-1" \
+  -backend-config="region=us-east-1" \
   -backend-config="encrypt=true" \
   -backend-config="use_lockfile=true"
 ```
