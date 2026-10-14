@@ -1,5 +1,5 @@
 environment        = "dev"
-aws_region         = "eu-west-1"
+aws_region         = "us-east-1"
 single_nat_gateway = true
 app_port           = 80
 health_check_path  = "/"

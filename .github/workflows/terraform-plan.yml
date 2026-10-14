@@ -1,0 +1,101 @@
+name: Terraform Plan
+
+# Preview only: runs on pull requests and never changes AWS.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "envs/**"
+      - "modules/**"
+      - ".github/workflows/terraform-*.yml"
+
+# A new push to the same PR cancels the older plan run
+concurrency:
+  group: terraform-plan-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write       # lets the job request an OIDC token for AWS
+  contents: read
+  pull-requests: write  # lets the job post the plan as a PR comment
+
+env:
+  TF_VERSION: "1.10.5"  # keep in step with the version you use locally
+
+jobs:
+  plan:
+    name: Plan (${{ matrix.environment }})
+    runs-on: ubuntu-latest
+    environment: ${{ matrix.environment }}
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [dev, prod]
+    defaults:
+      run:
+        working-directory: envs/${{ matrix.environment }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: tf-plan-${{ matrix.environment }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Format check
+        run: terraform fmt -check -recursive -diff
+        working-directory: .
+
+      - name: Init
+        run: terraform init -input=false
+
+      - name: Validate
+        run: terraform validate -no-color
+
+      - name: Plan
+        run: |
+          set +e
+          terraform plan -no-color -input=false -lock-timeout=5m -out=tfplan > plan.txt 2>&1
+          code=$?
+          cat plan.txt
+          exit $code
+
+      - name: Comment plan on PR
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          TF_ENV: ${{ matrix.environment }}
+        with:
+          script: |
+            const fs = require('fs');
+            const env = process.env.TF_ENV;
+            const file = `${process.env.GITHUB_WORKSPACE}/envs/${env}/plan.txt`;
+            let plan = fs.existsSync(file)
+              ? fs.readFileSync(file, 'utf8')
+              : 'No plan output. An earlier step (fmt, init or validate) failed. See the workflow logs.';
+            if (plan.length > 60000) {
+              plan = plan.slice(0, 60000) + '\n\n... output truncated, see the workflow logs for the full plan.';
+            }
+            const marker = `<!-- terraform-plan-${env} -->`;
+            const fence = '```';
+            const body = `${marker}\n### Terraform plan: \`${env}\`\n<details><summary>Show plan</summary>\n\n${fence}\n${plan}\n${fence}\n</details>`;
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
