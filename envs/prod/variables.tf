@@ -102,7 +102,7 @@ variable "db_multi_az" {
 variable "db_backup_retention_period" {
   description = "Automated backup retention in days"
   type        = number
-  default     = 7
+  default     = 1
 }
 
 variable "db_skip_final_snapshot" {
