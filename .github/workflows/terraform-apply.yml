@@ -7,6 +7,7 @@ on:
     paths:
       - "envs/**"
       - "modules/**"
+  workflow_dispatch:
 
 permissions:
   id-token: write
@@ -51,6 +52,15 @@ jobs:
           role-to-assume: ${{ vars.AWS_APPLY_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
           role-session-name: tf-apply-${{ matrix.environment }}
+
+      - name: Verify apply role
+        run: |
+          ARN=$(aws sts get-caller-identity --query Arn --output text)
+          echo "Running as: $ARN"
+          case "$ARN" in
+            *github-actions-terraform-apply-role*) ;;
+            *) echo "Wrong role, stopping before any changes."; exit 1 ;;
+          esac
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
