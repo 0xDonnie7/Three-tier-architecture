@@ -63,7 +63,7 @@ variable "multi_az" {
 variable "backup_retention_period" {
   description = "Days to keep automated backups (0 disables them)"
   type        = number
-  default     = 7
+  default     = 1
 }
 
 variable "skip_final_snapshot" {
