@@ -90,7 +90,7 @@ variable "user_data" {
 variable "db_instance_class" {
   description = "RDS PostgreSQL instance class"
   type        = string
-  default     = "db.t4g.small"
+  default     = "db.t3.micro"
 }
 
 variable "db_multi_az" {
