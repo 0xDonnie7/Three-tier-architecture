@@ -21,7 +21,8 @@ Networking: one VPC per environment, two public and two private subnets across t
 
 Security groups chain the tiers together: the ALB accepts web traffic from the internet, the app instances accept traffic only from the ALB, and the database accepts PostgreSQL traffic (port 5432) only from the app instances.
 
-Repository layout
+## Repository layout
+```
 .
 ├── .github/workflows/
 │   ├── terraform-plan.yml      # PR preview (read-only role)
@@ -35,20 +36,22 @@ Repository layout
     ├── alb/                    # Load balancer, listener, target group
     ├── compute/                # Launch template, ASG, instance IAM role
     └── database/               # RDS instance and subnet group
-CI/CD pipeline
-1. Plan on pull request (terraform-plan.yml)
+```
+
+## CI/CD pipeline
+### 1. Plan on pull request (terraform-plan.yml)
 
 Runs when a PR targeting main changes envs/**, modules/**, or a Terraform workflow file. For both dev and prod it runs terraform fmt -check, init, validate, and plan, then posts the result as a PR comment titled Terraform plan: dev or Terraform plan: prod. The comment is updated in place on later pushes. This workflow never changes AWS and uses a read-only role.
 
-2. Apply on merge (terraform-apply.yml)
+### 2. Apply on merge (terraform-apply.yml)
 
 Runs on pushes to main that touch envs/** or modules/**, and can also be started manually. Environments deploy one at a time: dev first, then prod. If dev fails, prod does not run. The prod GitHub Environment can require a reviewer, so a prod deployment waits for approval. A verification step confirms the job is running as the apply role before anything is created.
 
-3. Destroy (terraform-destroy.yml)
+### 3. Destroy (terraform-destroy.yml)
 
 Manual only, and only from main. You choose an environment and must type its name again to confirm. The workflow turns off deletion protection on the database and load balancer, shows the destroy plan, and then destroys the environment.
 
-Authentication and IAM
+## Authentication and IAM
 
 GitHub Actions assumes AWS roles through OpenID Connect. Each job requests a short-lived token, and AWS exchanges it for temporary credentials if the token matches the role's trust policy.
 
@@ -58,15 +61,15 @@ Apply role	terraform-apply.yml, terraform-destroy.yml	Create, change, and delete
 
 The apply role's trust policy is restricted to this repository, to the dev and prod GitHub Environments, and to the specific workflow files that are allowed to use it (job_workflow_ref). A pull request branch cannot assume it.
 
-State management
+## State management
 
-Terraform state is stored in an S3 bucket with one key per environment (dev/terraform.tfstate and prod/terraform.tfstate). State locking uses S3's native lock file, so concurrent runs against the same environment are blocked.
+Terraform state is stored in an S3 bucket with one key per environment: `dev/terraform.tfstate` and `prod/terraform.tfstate`. State locking uses S3's native lock file, so concurrent runs against the same environment are blocked.
 
-Setup
+### Setup
 S3 bucket for Terraform state, with versioning and encryption enabled.
-OIDC identity provider in IAM for token.actions.githubusercontent.com with audience sts.amazonaws.com.
+OIDC identity provider in IAM for `token.actions.githubusercontent.com` with `audience sts.amazonaws.com.`
 Two IAM roles (plan and apply) with trust policies scoped to this repository.
-GitHub Environments named dev and prod. Add a required reviewer to prod.
+GitHub Environments named `dev` and `prod`. Add a required reviewer to `prod`.
 Repository variables (Settings, Secrets and variables, Actions, Variables):
 Variable	Value
 AWS_ROLE_ARN	ARN of the plan role
