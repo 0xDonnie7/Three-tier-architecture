@@ -12,10 +12,11 @@ A three-tier web architecture on AWS, defined entirely in Terraform's HCL and de
 
 ![Architecture diagram](architecture_diagram/Three%20tier%20web%20application%20diagram.png)
 
-Tier	What it is	Key details
-Web / entry	Application Load Balancer	Internet-facing, in public subnets, HTTP listener
-Application	Auto Scaling Group of EC2 instances	Amazon Linux 2023 running nginx, 2 to 4 instances, CPU target-tracking scaling, IMDSv2 required, encrypted volumes, managed through SSM
-Data	RDS PostgreSQL 16	Private subnets only, encrypted storage, master password managed in AWS Secrets Manager
+| Tier | Service |
+|---|---|
+| Web / entry | Application Load Balancer |
+| Application | Auto Scaling Group of EC2 instances |
+| Data | RDS PostgreSQL 16 |
 
 Networking: one VPC per environment, two public and two private subnets across two Availability Zones, an internet gateway, and NAT gateways so private instances can reach the internet outbound.
 
@@ -39,17 +40,17 @@ Security groups chain the tiers together: the ALB accepts web traffic from the i
 ```
 
 ## CI/CD pipeline
-### 1. Plan on pull request (terraform-plan.yml)
+### 1. Plan on pull request (`terraform-plan.yml`)
 
-Runs when a PR targeting main changes envs/**, modules/**, or a Terraform workflow file. For both dev and prod it runs terraform fmt -check, init, validate, and plan, then posts the result as a PR comment titled Terraform plan: dev or Terraform plan: prod. The comment is updated in place on later pushes. This workflow never changes AWS and uses a read-only role.
+Runs when a PR targeting `main` changes `envs/**`, `modules/**`, or a Terraform workflow file. For both `dev` and `prod` it runs `terraform fmt -check`, `init`, `validate`, and `plan`, then posts the result as a PR comment titled Terraform plan: dev or Terraform plan: prod. The comment is updated in place on later pushes. This workflow never changes AWS and uses a read-only role.
 
 ### 2. Apply on merge (terraform-apply.yml)
 
-Runs on pushes to main that touch envs/** or modules/**, and can also be started manually. Environments deploy one at a time: dev first, then prod. If dev fails, prod does not run. The prod GitHub Environment can require a reviewer, so a prod deployment waits for approval. A verification step confirms the job is running as the apply role before anything is created.
+Runs on pushes to main that touch `envs/**` or `modules/**`, and can also be started manually. Environments deploy one at a time: `dev` first, then `prod`. If `dev` fails, `prod` does not run. The `prod` GitHub Environment can require a reviewer, so a `prod` deployment waits for approval. A verification step confirms the job is running as the apply role before anything is created.
 
 ### 3. Destroy (terraform-destroy.yml)
 
-Manual only, and only from main. You choose an environment and must type its name again to confirm. The workflow turns off deletion protection on the database and load balancer, shows the destroy plan, and then destroys the environment.
+Manual only, and only from `main`. You choose an environment and must type its name again to confirm. The workflow turns off deletion protection on the database and load balancer, shows the destroy plan, and then destroys the environment.
 
 ## Authentication and IAM
 
@@ -66,35 +67,38 @@ The apply role's trust policy is restricted to this repository, to the dev and p
 Terraform state is stored in an S3 bucket with one key per environment: `dev/terraform.tfstate` and `prod/terraform.tfstate`. State locking uses S3's native lock file, so concurrent runs against the same environment are blocked.
 
 ### Setup
-S3 bucket for Terraform state, with versioning and encryption enabled.
-OIDC identity provider in IAM for `token.actions.githubusercontent.com` with `audience sts.amazonaws.com.`
-Two IAM roles (plan and apply) with trust policies scoped to this repository.
-GitHub Environments named `dev` and `prod`. Add a required reviewer to `prod`.
-Repository variables (Settings, Secrets and variables, Actions, Variables):
-Variable	Value
-AWS_ROLE_ARN	ARN of the plan role
-AWS_APPLY_ROLE_ARN	ARN of the apply role
-AWS_REGION	us-east-1
-Open a pull request to see the plan comments, and merge to deploy.
-Lessons learned
+1. S3 bucket for Terraform state, with versioning and encryption enabled.
+2. OIDC identity provider in IAM for `token.actions.githubusercontent.com` with `audience sts.amazonaws.com.`
+3. Two IAM roles (plan and apply) with trust policies scoped to this repository.
+4. GitHub Environments named `dev` and `prod`. Add a required reviewer to `prod`.
+5. Repository variables (Settings, Secrets and variables, Actions, Variables):
 
+| Variable | Value
+|`AWS_ROLE_ARN` | `ARN of the plan role`
+`AWS_APPLY_ROLE_ARN` |	`ARN of the apply role`
+`AWS_REGION` | `us-east-1`
+
+6. Open a pull request to see the plan comments, and merge to deploy.
+
+## Lessons learned
 These came up while building the pipeline and are worth knowing before setting up something similar.
 
-GitHub's OIDC subject format changed. Repositories created after July 15, 2026 use an immutable subject that includes numeric owner and repository IDs (for example repo:OWNER@123/REPO@456:...). Trust policies written for the older name-only format are rejected. Printing the token's claims in a debug step shows exactly what GitHub sends.
-Using a GitHub Environment changes the OIDC subject. The subject ends in environment:<name> instead of pull_request, so the trust policy must allow that form.
-Plan and apply need different roles. Previews run on every PR, so the role they use should not be able to change infrastructure.
-State write access is essential for apply. If an apply cannot save state, it leaves real resources behind that Terraform has no record of.
-Re-running a workflow replays the old file. "Re-run jobs" uses the workflow file from the original commit. Fixes to the workflow need a new run on a new commit.
-AWS free plan accounts restrict some RDS settings. Backup retention and instance size had to be reduced to fit, so the deployed database settings are smaller than a typical production setup.
-Deletion protection blocks terraform destroy. The destroy workflow disables it first.
-Cost and cleanup
+- GitHub's OIDC subject format changed. Repositories created after July 15, 2026 use an immutable subject that includes numeric owner and repository IDs (for example repo:OWNER@123/REPO@456:...). Trust policies written for the older name-only format are rejected. Printing the token's claims in a debug step shows exactly what GitHub sends.
+- Using a GitHub Environment changes the OIDC subject. The subject ends in environment:<name> instead of pull_request, so the trust policy must allow that form.
+- Plan and apply need different roles. Previews run on every PR, so the role they use should not be able to change infrastructure.
+- State write access is essential for apply. If an apply cannot save state, it leaves real resources behind that Terraform has no record of.
+- Re-running a workflow replays the old file. "Re-run jobs" uses the workflow file from the original commit. Fixes to the workflow need a new run on a new commit.
+- AWS free plan accounts restrict some RDS settings. Backup retention and instance size had to be reduced to fit, so the deployed database settings are smaller than a typical production setup.
+- Deletion protection blocks terraform destroy. The destroy workflow disables it first.
+
+## Cost and cleanup
 
 Running both environments is not free. NAT gateways, load balancers, and RDS instances bill by the hour while they exist. Tear environments down when you are finished using the Terraform Destroy workflow, then check the AWS console for leftovers (NAT gateways, Elastic IPs, load balancers, databases, and snapshots).
 
-Possible improvements
-Add HTTPS to the load balancer with an ACM certificate and an HTTP-to-HTTPS redirect
-Narrow the apply role's permissions further using CloudTrail or IAM Access Analyzer
-Add a permissions boundary for the IAM roles that Terraform creates
-Add cost estimation (for example Infracost) to the PR comments
-Add security scanning (for example tfsec or Checkov) to the plan workflow
-Restore production-grade database settings (Multi-AZ, larger instance, longer backup retention) on a paid account plan
+## Possible improvements
+- Add HTTPS to the load balancer with an ACM certificate and an HTTP-to-HTTPS redirect
+- Narrow the apply role's permissions further using CloudTrail or IAM Access Analyzer
+- Add a permissions boundary for the IAM roles that Terraform creates
+- Add cost estimation (for example, Infracost) to the PR comments
+- Add security scanning (for example, tfsec or Checkov) to the plan workflow
+- Restore production-grade database settings (Multi-AZ, larger instance, longer backup retention) on a paid account plan
