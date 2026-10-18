@@ -1,6 +1,6 @@
 # AWS Three-Tier Architecture with Terraform and GitHub Actions CI/CD
 
-A three-tier web architecture on AWS, defined entirely in Terraform's HCL and deployed through GitHub Actions. Pull requests get an automatic plan preview; merges to main deploy `dev` and then `prod`, and a manual workflow tears environments down. GitHub authenticates to AWS with short-lived OIDC credentials, so there are no stored access keys.
+A three-tier web architecture on AWS, defined entirely in Terraform's HCL and deployed through GitHub Actions. Pull requests get an automatic plan preview; merges to `main` deploy `dev` and then `prod`, and a manual workflow tears environments down. GitHub authenticates to AWS with short-lived OIDC credentials, so there are no stored access keys.
 
 ## What this project demonstrates
 - Infrastructure as code with reusable Terraform modules and separate dev and prod environments
@@ -56,44 +56,47 @@ Manual only, and only from `main`. You choose an environment and must type its n
 
 GitHub Actions assumes AWS roles through OpenID Connect. Each job requests a short-lived token, and AWS exchanges it for temporary credentials if the token matches the role's trust policy.
 
-Role	Used by	Permissions
-Plan role	terraform-plan.yml	Read-only access to the services in this stack, plus read and lock access to the state bucket
-Apply role	terraform-apply.yml, terraform-destroy.yml	Create, change, and delete access scoped to this stack's services, region, and resource names, plus write access to the state files
 
-The apply role's trust policy is restricted to this repository, to the dev and prod GitHub Environments, and to the specific workflow files that are allowed to use it (job_workflow_ref). A pull request branch cannot assume it.
+| Role | Used by | Permissions |
+|---|---|---|
+| Plan role | `terraform-plan.yml` | Read-only access to the services in this stack, plus read and lock access to the state bucket |
+| Apply role | `terraform-apply.yml`, `terraform-destroy.yml` | Create, change, and delete access scoped to this stack's services, region, and resource names, plus write access to the state files |
+
+The apply role's trust policy is restricted to this repository, to the `dev` and `prod` GitHub Environments, and to the specific workflow files that are allowed to use it (`job_workflow_ref`). A pull request branch cannot assume it.
 
 ## State management
 
 Terraform state is stored in an S3 bucket with one key per environment: `dev/terraform.tfstate` and `prod/terraform.tfstate`. State locking uses S3's native lock file, so concurrent runs against the same environment are blocked.
 
 ### Setup
-1. S3 bucket for Terraform state, with versioning and encryption enabled.
-2. OIDC identity provider in IAM for `token.actions.githubusercontent.com` with `audience sts.amazonaws.com.`
-3. Two IAM roles (plan and apply) with trust policies scoped to this repository.
-4. GitHub Environments named `dev` and `prod`. Add a required reviewer to `prod`.
-5. Repository variables (Settings, Secrets and variables, Actions, Variables):
+1. **S3 bucket** for Terraform state, with versioning and encryption enabled.
+2. **OIDC identity provider ** in IAM for `token.actions.githubusercontent.com` with `audience sts.amazonaws.com`
+3.  **Two IAM roles ** (plan and apply) with trust policies scoped to this repository.
+4.  **GitHub Environments ** named `dev` and `prod`. Add a required reviewer to `prod`.
+5.  **Repository variables** (Settings, Secrets and variables, Actions, Variables):
 
-| Variable | Value
-|`AWS_ROLE_ARN` | `ARN of the plan role`
-`AWS_APPLY_ROLE_ARN` |	`ARN of the apply role`
-`AWS_REGION` | `us-east-1`
+   | Variable | Value |
+   |---|---|
+   | `AWS_ROLE_ARN` | ARN of the plan role |
+   | `AWS_APPLY_ROLE_ARN` | ARN of the apply role |
+   | `AWS_REGION` | `us-east-1` |
 
 6. Open a pull request to see the plan comments, and merge to deploy.
 
 ## Lessons learned
 These came up while building the pipeline and are worth knowing before setting up something similar.
 
-- GitHub's OIDC subject format changed. Repositories created after July 15, 2026 use an immutable subject that includes numeric owner and repository IDs (for example repo:OWNER@123/REPO@456:...). Trust policies written for the older name-only format are rejected. Printing the token's claims in a debug step shows exactly what GitHub sends.
-- Using a GitHub Environment changes the OIDC subject. The subject ends in environment:<name> instead of pull_request, so the trust policy must allow that form.
-- Plan and apply need different roles. Previews run on every PR, so the role they use should not be able to change infrastructure.
-- State write access is essential for apply. If an apply cannot save state, it leaves real resources behind that Terraform has no record of.
-- Re-running a workflow replays the old file. "Re-run jobs" uses the workflow file from the original commit. Fixes to the workflow need a new run on a new commit.
-- AWS free plan accounts restrict some RDS settings. Backup retention and instance size had to be reduced to fit, so the deployed database settings are smaller than a typical production setup.
-- Deletion protection blocks terraform destroy. The destroy workflow disables it first.
+- **GitHub's OIDC subject format changed.** Repositories created after July 15, 2026 use an immutable subject that includes numeric owner and repository IDs (for example repo:OWNER@123/REPO@456:...). Trust policies written for the older name-only format are rejected. Printing the token's claims in a debug step shows exactly what GitHub sends.
+- **Using a GitHub Environment changes the OIDC subject.** The subject ends in environment:<name> instead of pull_request, so the trust policy must allow that form.
+- **Plan and apply need different roles.** Previews run on every PR, so the role they use should not be able to change infrastructure.
+- **State write access is essential for apply.** If an apply cannot save state, it leaves real resources behind that Terraform has no record of.
+- **Re-running a workflow replays the old file.** "Re-run jobs" uses the workflow file from the original commit. Workflow fixes require a new run on a new commit.
+- **AWS free plan accounts restrict some RDS settings.** Backup retention and instance size had to be reduced to fit, so the deployed database settings are smaller than a typical production setup.
+- **Deletion protection blocks terraform destroy.** The destroy workflow disables it first.
 
 ## Cost and cleanup
 
-Running both environments is not free. NAT gateways, load balancers, and RDS instances bill by the hour while they exist. Tear environments down when you are finished using the Terraform Destroy workflow, then check the AWS console for leftovers (NAT gateways, Elastic IPs, load balancers, databases, and snapshots).
+Running both environments is not free. NAT gateways, load balancers, and RDS instances bill by the hour while they exist. Tear environments down when you are finished using the **Terraform Destroy** workflow, then check the AWS console for leftovers (NAT gateways, Elastic IPs, load balancers, databases, and snapshots).
 
 ## Possible improvements
 - Add HTTPS to the load balancer with an ACM certificate and an HTTP-to-HTTPS redirect
