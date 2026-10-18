@@ -1,9 +1,16 @@
-# Three tier AWS application
+# AWS Three-Tier Architecture with Terraform and GitHub Actions CI/CD
 
-Terraform is split into independent `envs/dev` and `envs/prod` roots. Each root creates a VPC with public and private subnets, an internet facing Application Load Balancer, an EC2 Auto Scaling Group in the private subnets, and a private PostgreSQL RDS instance. RDS generates and stores its master credentials in Secrets Manager; the EC2 role receives permission to read that secret.
+A three-tier web architecture on AWS, defined entirely in Terraform's HCL and deployed through GitHub Actions. Pull requests get an automatic plan preview; merges to main deploy dev and then prod, and a manual workflow tears environments down. GitHub authenticates to AWS with short-lived OIDC credentials, so there are no stored access keys.
 
 ![Architecture diagram](architecture_diagram/Three%20tier%20web%20application%20diagram.png)
-The compute module currently starts a basic Nginx placeholder page. Set `user_data` when calling the module to supply your application bootstrap script. Set `certificate_arn` in an environment tfvars file to enable HTTPS on the ALB; without it the listener serves HTTP.
+
+# What this project demonstrates
+- Infrastructure as code with reusable Terraform modules and separate dev and prod environments
+- A plan-on-PR, apply-on-merge workflow, with plan output posted as PR comments
+- Keyless AWS authentication from GitHub Actions using OIDC
+- Least-privilege IAM: a read-only role for previews and a separate, scoped role for deployments
+- Remote state in S3 with native state locking
+- A guarded, manual destroy workflow
 
 ## Initialize an environment
 
