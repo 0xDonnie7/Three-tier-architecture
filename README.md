@@ -1,6 +1,6 @@
 # AWS Three-Tier Architecture with Terraform and GitHub Actions CI/CD
 
-A three-tier web architecture on AWS, defined entirely in Terraform's HCL and deployed through GitHub Actions. Pull requests get an automatic plan preview; merges to `main` deploy `dev` and then `prod`, and a manual workflow tears environments down. GitHub authenticates to AWS with short-lived OIDC credentials, so there are no stored access keys.
+This project deploys a three-tier web architecture on AWS, defined entirely in Terraform's HCL and deployed through GitHub Actions. Pull requests get an automatic plan preview; merges to `main` deploy `dev` and then `prod`, and a manual workflow tears environments down. GitHub authenticates to AWS with short-lived OIDC credentials, so there are no stored access keys.
 
 ## What this project demonstrates
 - Infrastructure as code with reusable Terraform modules and separate dev and prod environments
