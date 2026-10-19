@@ -70,9 +70,9 @@ Terraform state is stored in an S3 bucket with one key per environment: `dev/ter
 
 ### Setup
 1. **S3 bucket** for Terraform state, with versioning and encryption enabled.
-2. **OIDC identity provider ** in IAM for `token.actions.githubusercontent.com` with `audience sts.amazonaws.com`
-3.  **Two IAM roles ** (plan and apply) with trust policies scoped to this repository.
-4.  **GitHub Environments ** named `dev` and `prod`. Add a required reviewer to `prod`.
+2. **OIDC identity provider** in IAM for `token.actions.githubusercontent.com` with `audience sts.amazonaws.com`
+3.  **Two IAM roles** (plan and apply) with trust policies scoped to this repository.
+4.  **GitHub Environments** named `dev` and `prod`. Add a required reviewer to `prod`.
 5.  **Repository variables** (Settings, Secrets and variables, Actions, Variables):
 
    | Variable | Value |
