@@ -87,7 +87,7 @@ Terraform state is stored in an S3 bucket with one key per environment: `dev/ter
 These came up while building the pipeline and are worth knowing before setting up something similar.
 
 - **GitHub's OIDC subject format changed.** Repositories created after July 15, 2026 use an immutable subject that includes numeric owner and repository IDs (for example repo:OWNER@123/REPO@456:...). Trust policies written for the older name-only format are rejected. Printing the token's claims in a debug step shows exactly what GitHub sends.
-- **Using a GitHub Environment changes the OIDC subject.** The subject ends in environment:<name> instead of pull_request, so the trust policy must allow that form.
+- **Using a GitHub Environment changes the OIDC subject.** A job that sets environment: dev sends a subject ending in environment:dev, even when it runs on a pull request, so the IAM trust policy must list the environment:<name> form.
 - **Plan and apply need different roles.** Previews run on every PR, so the role they use should not be able to change infrastructure.
 - **State write access is essential for apply.** If an apply cannot save state, it leaves real resources behind that Terraform has no record of.
 - **Re-running a workflow replays the old file.** "Re-run jobs" uses the workflow file from the original commit. Workflow fixes require a new run on a new commit.
